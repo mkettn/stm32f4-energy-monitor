@@ -95,6 +95,8 @@ def cont_read(serial, mpoints, delay, pin):
     em = pyenergy.EnergyMonitor(serial)
     em.connect()
 
+    print "time,",
+
     for mp in mpoints:
         em.enableMeasurementPoint(mp)
         em.setCounter(pin, mp)
