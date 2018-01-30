@@ -101,7 +101,7 @@ def cont_read(serial, mpoints, delay, pin):
         em.enableMeasurementPoint(mp)
         em.setCounter(pin, mp)
         em.start(mp)
-        print "cnt_{0}, energy_{0}, power_{0}, avg_current_{0}, avg_voltage_{0},".format(mp),
+        print "cnt_{0}, n_samples_{0}, energy_{0}, power_{0}, avg_current_{0}, avg_voltage_{0},".format(mp),
     print ""
 
     try:
@@ -109,10 +109,11 @@ def cont_read(serial, mpoints, delay, pin):
             first = True
             for mp in mpoints:
                 m = em.getMeasurement(mp)
+                em.start() # restart sampling
 
                 if first:
                     print "{}, ".format(m.time),
-                print "{}, {}, {}, {}A, {}V,".format(m.cnt, m.energy, m.energy/m.time, m.avg_current, m.avg_voltage),
+                print "{}, {}, {}, {}, {}A, {}V,".format(m.cnt, m.n_samples, m.energy, m.energy/m.time, m.avg_current, m.avg_voltage),
             print ""
             sleep(delay)
     except KeyboardInterrupt:
