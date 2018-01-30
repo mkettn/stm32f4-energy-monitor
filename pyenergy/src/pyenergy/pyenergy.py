@@ -92,10 +92,10 @@ class MeasurementSet(object):
 
 @total_ordering
 class Measurement(object):
-    class_version = 1
+    class_version = 2
 
     def __init__(self, energy=0, time=0, peak_power=0, peak_voltage=0, peak_current=0,
-                n_samples=0, avg_voltage=0, avg_current=0, avg_power=0):
+                 n_samples=0, avg_voltage=0, avg_current=0, avg_power=0,cnt=0):
         self.energy       = float(energy)
         self.time         = float(time)
         self.peak_power   = float(peak_power)
@@ -105,11 +105,13 @@ class Measurement(object):
         self.avg_voltage  = float(avg_voltage)
         self.avg_current  = float(avg_current)
         self.avg_power    = float(avg_power)
+        self.cnt          = int(cnt)
+
         self.version      = Measurement.class_version
 
     def _op_self(self, other, fn):
         params = ["energy", "time", "peak_power", "peak_voltage", "peak_current",
-                "n_samples", "avg_voltage", "avg_current", "avg_power"]
+                  "n_samples", "avg_voltage", "avg_current", "avg_power", "cnt"]
         m = Measurement()
         for p in params:
             m.__dict__[p] = fn(self.__dict__[p], other.__dict__[p])
@@ -117,7 +119,7 @@ class Measurement(object):
 
     def _op_const(self, const, fn):
         params = ["energy", "time", "peak_power", "peak_voltage", "peak_current",
-                "n_samples", "avg_voltage", "avg_current", "avg_power"]
+                  "n_samples", "avg_voltage", "avg_current", "avg_power", "cnt"]
         m = Measurement()
         for p in params:
             m.__dict__[p] = fn(self.__dict__[p], const)
@@ -152,7 +154,7 @@ class Measurement(object):
 
     def __eq__(self, rhs):
         params = ["energy", "time", "peak_power", "peak_voltage", "peak_current",
-                 "n_samples", "avg_voltage", "avg_current", "avg_power"]
+                  "n_samples", "avg_voltage", "avg_current", "avg_power", "cnt"]
 
         for p in params:
             if self.__dict__[p] != rhs.__dict__[p]:
@@ -162,7 +164,7 @@ class Measurement(object):
 
     def __lt__(self, rhs):
         params = ["energy", "time", "peak_power", "peak_voltage", "peak_current",
-                 "n_samples", "avg_voltage", "avg_current", "avg_power"]
+                  "n_samples", "avg_voltage", "avg_current", "avg_power", "cnt"]
         s1 = (self.__dict__[p] for p in params)
         s2 = (rhs.__dict__[p] for p in params)
 
@@ -220,8 +222,8 @@ class EnergyMonitor(object):
             em.getMeasurement(1)
     """
 
-    MeasurementData = namedtuple('MeasurementData', 'energy_accum elapsed_time peak_power peak_voltage peak_current n_samples avg_current avg_voltage')
-    MeasurementData_packing = "=QQLLLLQQ"
+    MeasurementData = namedtuple('MeasurementData', 'energy_accum elapsed_time peak_power peak_voltage peak_current n_samples avg_current avg_voltage cnt')
+    MeasurementData_packing = "=QQLLLLQQQ"
 
     InstantaneousData = namedtuple('InstantaneousData', 'voltage current average_voltage average_current current_time')
     InstantaneousData_packing = "=LLLLQ"
@@ -237,7 +239,7 @@ class EnergyMonitor(object):
     # The boards did not use to have a version associated with them, the first
     # version is version 10 (thus if we have an error getting the version we
     # assume the board is older than version 10).
-    newestVersion = 13
+    newestVersion = 15
     baseVersion = 10
 
     def __init__(self, serial="EE00"):
@@ -440,6 +442,24 @@ class EnergyMonitor(object):
         info("Set trigger on {}".format(port))
         self.dev.ctrl_transfer(0x43, 4, ord(port[1]) | (m_point<<8), int(port[2]), None)
 
+    def setCounter(self, port, m_point=1):
+        """
+            Set up a trigger on the specified port and measurement point. The
+            board will automatically start measuring when the pin rises, and
+            stop when the pin falls.
+
+            The port should be of the form P[A-H][0-9]. Not all pins on the
+            board will work, due to peripheral multiplexing and additional
+            components attached to some pins.
+
+            TODO: a list of acceptable and tested pins (PA0 works).
+        """
+
+        # TODO check port is of the form PA0
+        info("Set trigger on {}".format(port))
+        self.dev.ctrl_transfer(0x43, 14, ord(port[1]) | (m_point<<8), int(port[2]), None)
+
+
     # Enable a particular measurement point. There are
     # only 3 ADCs in the device, so only 3 measurement points
     # can be used simultaneously
@@ -515,7 +535,7 @@ class EnergyMonitor(object):
         except ZeroDivisionError:
             en, el, pp, pv, pi, av, ai, ap = 0, 0, 0, 0, 0, 0, 0, 0
 
-        m = Measurement(en, el, pp, pv, pi, md.n_samples, av, ai, ap)
+        m = Measurement(en, el, pp, pv, pi, md.n_samples, av, ai, ap, md.cnt)
 
         return m
 

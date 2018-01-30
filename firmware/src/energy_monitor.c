@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <ctype.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/adc.h>
@@ -106,6 +107,7 @@ typedef struct {
     unsigned n_samples;
     uint64_t avg_current;
     uint64_t avg_voltage;
+        uint64_t cnt;
 } accumulated_data;
 
 typedef struct {
@@ -121,7 +123,7 @@ int tperiod=500;
 typedef struct {
     accumulated_data accum_data;
     instant_data id;
-
+    char enable_cnt;
 
     int idx;
     int running; // Are we collecting measurements
@@ -150,7 +152,7 @@ usbd_device *usbd_dev;
 
 uint8_t control_buffer[128] __attribute__((aligned (16)));
 
-unsigned versionNumber=14;
+unsigned versionNumber=15;
 
 /////////////////////////////////////////////////////////////////////
 
@@ -204,7 +206,6 @@ void exti_setup(int m_point)
 void start_measurement(int m_point)
 {
     m_points[m_point].running = 1;
-
     m_points[m_point].accum_data.energy_accum = 0;
     m_points[m_point].accum_data.elapsed_time = 0;
     m_points[m_point].accum_data.peak_power = 0;
@@ -406,7 +407,36 @@ static int usbdev_control_request(usbd_device *usbd_dev, struct usb_setup_data *
         *buf = (uint8_t*)serial_str;
         break;
     }
+    case 14: // enable counting for mp
+        if(*len != 0)
+            return 0;
 
+        int m_point = (req->wValue >> 8) - 1;
+
+        gpio_toggle(GPIOD, GPIO14);
+
+        switch(req->wValue & 0xFF)
+        {
+            case 'A': m_points[m_point].trigger_port = GPIOA; break;
+            case 'B': m_points[m_point].trigger_port = GPIOB; break;
+            case 'C': m_points[m_point].trigger_port = GPIOC; break;
+            case 'D': m_points[m_point].trigger_port = GPIOD; break;
+            case 'E': m_points[m_point].trigger_port = GPIOE; break;
+            case 'F': m_points[m_point].trigger_port = GPIOF; break;
+            case 'G': m_points[m_point].trigger_port = GPIOG; break;
+            case 'H': m_points[m_point].trigger_port = GPIOH; break;
+            default:
+                m_points[m_point].trigger_port = -1; break;
+        }
+
+        m_points[m_point].trigger_pin = 1 << (req->wIndex & 0xFF);
+
+        if(m_points[m_point].trigger_port != GPIOA)
+            gpio_toggle(GPIOD, GPIO12);
+
+        exti_setup(m_point);
+        m_points[m_point].enable_cnt = 1;
+            break;
     default:
         return 0;
     }
@@ -598,6 +628,7 @@ int main(void)
         m_points[i].assigned_adc = -1;
         m_points[i].trigger_port = -1;
         m_points[i].trigger_pin = -1;
+        m_points[i].accum_data.cnt = 0;
     }
 
     m_points[0].chans[0] = 2;
@@ -655,8 +686,11 @@ void exti_isr()
 
             if(gpio_get(m_points[i].trigger_port, m_points[i].trigger_pin))
             {
+                    if (m_points[i].enable_cnt)
+                            m_points[i].accum_data.cnt++;
+
                 if(!m_points[i].running)
-                start_measurement(i);
+                        start_measurement(i);
             }
             else
             {

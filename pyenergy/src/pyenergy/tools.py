@@ -5,6 +5,7 @@
 Usage:
     energytool (-m MPOINT)... [options] read SERIAL PIN
     energytool (-m MPOINT)... [options] continuous SERIAL
+    energytool (-m MPOINT)... [options] cont_read SERIAL PIN
     energytool (-m MPOINT)... [options] debug SERIAL
     energytool list
     energytool setup
@@ -17,6 +18,9 @@ Commands:
 
     continuous      Continuously read measurements from the specified energy
                     monitor.
+
+    cont_read       enables counting and updates a counter, whenever the
+                    trigger pin is hit.
 
     debug           Output some debug data about the instantaneous voltages
                     seen on the ADCs, along with current and voltage.
@@ -87,16 +91,15 @@ def read(serial, pin, mpoints):
         display(m)
         print ""
 
-def continuous(serial, mpoints, delay=0.1):
+def cont_read(serial, mpoints, delay, pin):
     em = pyenergy.EnergyMonitor(serial)
     em.connect()
 
-    print "time,",
-
     for mp in mpoints:
         em.enableMeasurementPoint(mp)
+        em.setCounter(pin, mp)
         em.start(mp)
-        print "energy_{0}, power_{0}, avg_current_{0}, avg_voltage_{0},".format(mp),
+        print "cnt_{0}, energy_{0}, power_{0}, avg_current_{0}, avg_voltage_{0},".format(mp),
     print ""
 
     try:
@@ -106,8 +109,37 @@ def continuous(serial, mpoints, delay=0.1):
                 m = em.getMeasurement(mp)
 
                 if first:
-                    print m.time,
-                print "{}, {}, {}, {},".format(m.energy, m.energy/m.time, m.avg_current, m.avg_voltage),
+                    print "{}, ".format(m.time),
+                print "{}, {}, {}, {}A, {}V,".format(m.cnt, m.energy, m.energy/m.time, m.avg_current, m.avg_voltage),
+            print ""
+            sleep(delay)
+    except KeyboardInterrupt:
+        for mp in mpoints:
+            em.stop(mp)
+            em.disableMeasurementPoint(mp)
+
+
+def continuous(serial, mpoints, delay=0.1):
+    em = pyenergy.EnergyMonitor(serial)
+    em.connect()
+
+    print "time,",
+
+    for mp in mpoints:
+        em.enableMeasurementPoint(mp)
+        em.start(mp)
+        print "cnt_{0}, energy_{0}, power_{0}, avg_current_{0}, avg_voltage_{0},".format(mp),
+    print ""
+
+    try:
+        while True:
+            first = True
+            for mp in mpoints:
+                m = em.getMeasurement(mp)
+
+                if first:
+                    print "{}, ".format(m.time),
+                print "{}, {}, {}, {}A, {}V,".format(m.cnt, m.energy, m.energy/m.time, m.avg_current, m.avg_voltage),
             print ""
             sleep(delay)
     except KeyboardInterrupt:
@@ -321,6 +353,8 @@ def main():
         debug(arguments['SERIAL'], mpoints, float(arguments['--time']))
     elif arguments['continuous']:
         continuous(arguments['SERIAL'], mpoints, float(arguments['--time']))
+    elif arguments['cont_read']:
+        cont_read(arguments['SERIAL'], mpoints, float(arguments['--time']), arguments['PIN'])
     elif arguments['list']:
         list_boards()
     elif arguments['setup']:
