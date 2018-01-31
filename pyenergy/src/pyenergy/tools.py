@@ -95,27 +95,32 @@ def cont_read(serial, mpoints, delay, pin):
     em = pyenergy.EnergyMonitor(serial)
     em.connect()
 
+    import sched, time
+    s = sched.scheduler(time.time, time.sleep)
+
+    def printMeasurement():
+        first = True
+        for mp in mpoints:
+            m = em.getMeasurement(mp)
+            em.start()
+            if first:
+                print "{}, ".format(m.time),
+            print "{}, {}, {}, {}, {}A, {}V,".format(m.cnt, m.n_samples, m.energy, m.energy/m.time, m.avg_current, m.avg_voltage),
+            print ""
+        s.enter(delay, 1, printMeasurement, ())
+
     print "time,",
 
     for mp in mpoints:
         em.enableMeasurementPoint(mp)
         em.setCounter(pin, mp)
-        em.start(mp)
         print "cnt_{0}, n_samples_{0}, energy_{0}, power_{0}, avg_current_{0}, avg_voltage_{0},".format(mp),
+        em.start(mp) # restart sampling
     print ""
 
     try:
-        while True:
-            first = True
-            for mp in mpoints:
-                m = em.getMeasurement(mp)
-                em.start() # restart sampling
-
-                if first:
-                    print "{}, ".format(m.time),
-                print "{}, {}, {}, {}, {}A, {}V,".format(m.cnt, m.n_samples, m.energy, m.energy/m.time, m.avg_current, m.avg_voltage),
-            print ""
-            sleep(delay)
+        s.enter(delay, 1, printMeasurement, ())
+        s.run()
     except KeyboardInterrupt:
         for mp in mpoints:
             em.stop(mp)
