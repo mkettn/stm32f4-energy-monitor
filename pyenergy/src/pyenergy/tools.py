@@ -98,19 +98,23 @@ def cont_read(serial, mpoints, delay, pin):
     import sched, time
     s = sched.scheduler(time.time, time.sleep)
 
-    def printMeasurement():
+    def printMeasurement(accum_time, starttime):
         first = True
+        print "{}, ".format(time.time() - starttime),
+
         for mp in mpoints:
             m = em.getMeasurement(mp)
             em.start()
             if first:
-                print "{}, ".format(m.time),
+                accum_time += m.time
+                print "{}, ".format(accum_time),
+                first = False
             print "{}, {}, {}, {}, {}A, {}V,".format(m.cnt, m.n_samples, m.energy, m.energy/m.time, m.avg_current, m.avg_voltage),
             print ""
-        s.enter(delay, 1, printMeasurement, ())
+        s.enter(delay, 1, printMeasurement, (accum_time, starttime))
 
-    print "time,",
 
+    print "pytime, time,",
     for mp in mpoints:
         em.enableMeasurementPoint(mp)
         em.setCounter(pin, mp)
@@ -119,7 +123,7 @@ def cont_read(serial, mpoints, delay, pin):
     print ""
 
     try:
-        s.enter(delay, 1, printMeasurement, ())
+        s.enter(delay, 1, printMeasurement, (0, time.time()))
         s.run()
     except KeyboardInterrupt:
         for mp in mpoints:
